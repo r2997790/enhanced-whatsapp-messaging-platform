@@ -1,0 +1,112 @@
+        <!-- Bulk Message Tab -->
+        <div id="bulk-tab" class="tab-content">
+            <h2 style="color: #075E54; margin-bottom: 30px;">📋 Send Bulk Messages</h2>
+            
+            <form id="bulk-message-form">
+                <div class="form-group">
+                    <label for="bulk-phones">📱 Phone Numbers:</label>
+                    <textarea id="bulk-phones" placeholder="Enter phone numbers (one per line or comma-separated)&#10;1234567890&#10;9876543210&#10;441234567890" rows="6"></textarea>
+                    <small style="color: #666; font-size: 12px;">One number per line or comma-separated. Maximum 50 numbers per batch.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="bulk-message">💬 Message:</label>
+                    <textarea id="bulk-message" placeholder="Enter your message here..." required rows="6"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="delay">⏱️ Delay Between Messages (seconds):</label>
+                    <input type="number" id="delay" min="3" max="60" value="5" placeholder="5">
+                    <small style="color: #666; font-size: 12px;">Recommended: 5-10 seconds to avoid being blocked</small>
+                </div>
+
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <button type="submit" class="btn">📤 Send Bulk Messages</button>
+                    <button type="button" class="btn" style="background: linear-gradient(135deg, #6c757d, #495057);" onclick="previewRecipients()">👁️ Preview Recipients</button>
+                    <button type="button" class="btn" style="background: linear-gradient(135deg, #dc3545, #c82333);" onclick="clearBulkForm()">🗑️ Clear Form</button>
+                </div>
+            </form>
+
+            <!-- Recipients Preview -->
+            <div id="recipients-preview" style="display: none; background: #f8f9fa; border: 2px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h4 style="color: #075E54; margin-bottom: 15px;">📋 Recipients Preview</h4>
+                <div id="preview-list"></div>
+                <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px;">
+                    <small style="color: #075E54;">
+                        <strong>📊 Summary:</strong> <span id="preview-count">0</span> valid recipients found
+                    </small>
+                </div>
+            </div>
+
+            <!-- Progress Tracking -->
+            <div id="bulk-progress" style="display: none; background: #f8f9fa; border: 2px solid #25D366; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h4 style="color: #075E54; margin-bottom: 15px;">📊 Sending Progress</h4>
+                
+                <div style="background: #e0e0e0; border-radius: 10px; overflow: hidden; margin: 15px 0; height: 25px;">
+                    <div id="progress-fill" style="background: linear-gradient(90deg, #25D366, #128C7E); height: 100%; width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600;">
+                        0%
+                    </div>
+                </div>
+                
+                <div id="progress-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">
+                    <div style="text-align: center; padding: 10px; background: white; border-radius: 5px;">
+                        <div style="font-size: 1.2em; font-weight: 600; color: #25D366;" id="sent-count">0</div>
+                        <div style="font-size: 12px; color: #666;">Sent</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: white; border-radius: 5px;">
+                        <div style="font-size: 1.2em; font-weight: 600; color: #dc3545;" id="failed-count">0</div>
+                        <div style="font-size: 12px; color: #666;">Failed</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: white; border-radius: 5px;">
+                        <div style="font-size: 1.2em; font-weight: 600; color: #6c757d;" id="remaining-count">0</div>
+                        <div style="font-size: 12px; color: #666;">Remaining</div>
+                    </div>
+                </div>
+                
+                <div id="current-sending" style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; text-align: center; color: #075E54;">
+                    <strong>📤 Current:</strong> <span id="current-number">Ready to start...</span>
+                </div>
+            </div>
+
+            <!-- Bulk Messaging Tips -->
+            <div style="background: linear-gradient(135deg, #e8f5e8, #d4edda); border: 2px solid #25D366; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="color: #075E54; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                    💡 Bulk Messaging Best Practices
+                </h3>
+                <ul style="list-style: none; padding-left: 0;">
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;">
+                        <span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>
+                        Use delays of 5-10 seconds between messages
+                    </li>
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;">
+                        <span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>
+                        Send to maximum 50 recipients per batch
+                    </li>
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;">
+                        <span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>
+                        Include country codes (US: 1234567890, UK: 441234567890)
+                    </li>
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;">
+                        <span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>
+                        Personalize messages when possible
+                    </li>
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;">
+                        <span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>
+                        Monitor progress and check logs for failures
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Sample Phone Numbers -->
+            <div style="background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                <h4 style="color: #075E54; margin-bottom: 10px;">📱 Sample Phone Number Formats</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 14px;">
+                    <div><strong>USA:</strong> 1234567890</div>
+                    <div><strong>UK:</strong> 441234567890</div>
+                    <div><strong>India:</strong> 919876543210</div>
+                    <div><strong>Brazil:</strong> 5511999887766</div>
+                    <div><strong>Germany:</strong> 491234567890</div>
+                    <div><strong>Australia:</strong> 61412345678</div>
+                </div>
+            </div>
+        </div>
