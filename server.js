@@ -24,13 +24,18 @@ let isReady = false;
 let qrString = '';
 let connectedSockets = new Set();
 
-// Rate limiting
+// Enhanced rate limiting
 const messageQueue = new Map();
 const RATE_LIMIT = {
     maxMessages: 20,
     timeWindow: 60000, // 1 minute
-    delayBetweenMessages: 3000 // 3 seconds
+    delayBetweenMessages: 3000, // 3 seconds
+    bulkMaxMessages: 5,
+    bulkTimeWindow: 300000 // 5 minutes for bulk
 };
+
+// Bulk messaging state
+const activeBulkSends = new Map();
 
 // Initialize WhatsApp client
 function initializeWhatsAppClient() {
@@ -125,19 +130,23 @@ function initializeWhatsAppClient() {
     });
 }
 
-// Rate limiting functions
-function checkRateLimit(identifier) {
+// Enhanced rate limiting functions
+function checkRateLimit(identifier, type = 'message') {
     const now = Date.now();
     const userMessages = messageQueue.get(identifier) || [];
     
+    const config = type === 'bulk' ? 
+        { max: RATE_LIMIT.bulkMaxMessages, window: RATE_LIMIT.bulkTimeWindow } :
+        { max: RATE_LIMIT.maxMessages, window: RATE_LIMIT.timeWindow };
+    
     // Remove old messages outside the time window
     const recentMessages = userMessages.filter(
-        timestamp => now - timestamp < RATE_LIMIT.timeWindow
+        timestamp => now - timestamp < config.window
     );
     
     messageQueue.set(identifier, recentMessages);
     
-    return recentMessages.length < RATE_LIMIT.maxMessages;
+    return recentMessages.length < config.max;
 }
 
 function addToRateLimit(identifier) {
@@ -166,6 +175,47 @@ function validateMessage(to, message) {
         errors.push('Message content is required');
     } else if (message.length > 4096) {
         errors.push('Message is too long (max 4096 characters)');
+    }
+    
+    return errors;
+}
+
+// Enhanced bulk request validation
+function validateBulkRequest(phoneNumbers, message) {
+    const errors = [];
+    
+    // Validate phone numbers array
+    if (!Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
+        errors.push('Phone numbers array is required and cannot be empty');
+    } else {
+        if (phoneNumbers.length > 50) {
+            errors.push('Maximum 50 recipients allowed per bulk send');
+        }
+        
+        // Validate each phone number
+        const invalidNumbers = [];
+        phoneNumbers.forEach((phone, index) => {
+            const validationErrors = validateMessage(phone, 'test');
+            if (validationErrors.length > 0) {
+                invalidNumbers.push(`Position ${index + 1}: ${phone}`);
+            }
+        });
+        
+        if (invalidNumbers.length > 0) {
+            errors.push(`Invalid phone numbers found: ${invalidNumbers.slice(0, 3).join(', ')}${invalidNumbers.length > 3 ? ` and ${invalidNumbers.length - 3} more` : ''}`);
+        }
+    }
+    
+    // Validate message
+    if (!message || typeof message !== 'string') {
+        errors.push('Message content is required');
+    } else {
+        if (message.length > 4096) {
+            errors.push('Message is too long (max 4096 characters)');
+        }
+        if (message.trim().length === 0) {
+            errors.push('Message cannot be empty');
+        }
     }
     
     return errors;
@@ -217,6 +267,152 @@ async function sendMessage(to, message, retries = 3) {
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
     }
+}
+
+// Enhanced bulk message sending with progress tracking
+async function sendBulkMessages(phoneNumbers, message, delay = 5000, socket = null) {
+    const results = [];
+    const totalMessages = phoneNumbers.length;
+    let successCount = 0;
+    let failureCount = 0;
+    
+    console.log(`📋 Starting bulk send to ${totalMessages} recipients with ${delay}ms delay`);
+    
+    const startTime = Date.now();
+    const bulkId = `bulk_${Date.now()}_${socket?.id || 'system'}`;
+    
+    // Add to active bulk sends
+    activeBulkSends.set(bulkId, {
+        socketId: socket?.id,
+        total: totalMessages,
+        sent: 0,
+        failed: 0,
+        startTime: startTime
+    });
+    
+    for (let i = 0; i < phoneNumbers.length; i++) {
+        const phone = phoneNumbers[i];
+        const formattedPhone = formatPhoneNumber(phone);
+        
+        try {
+            // Check if we should continue
+            if (!whatsappClient || !isReady) {
+                throw new Error('WhatsApp client disconnected during bulk send');
+            }
+            
+            console.log(`📤 [${i + 1}/${totalMessages}] Sending to ${formattedPhone}`);
+            
+            // Send message with retry logic
+            const result = await sendMessage(formattedPhone, message, 2);
+            
+            results.push({
+                phone: formattedPhone,
+                status: 'success',
+                messageId: result.messageId,
+                timestamp: result.timestamp,
+                index: i + 1
+            });
+            
+            successCount++;
+            
+            // Emit success to specific socket if provided
+            if (socket) {
+                socket.emit('message_sent', {
+                    to: formattedPhone,
+                    message: message,
+                    messageId: result.messageId,
+                    timestamp: result.timestamp,
+                    bulkIndex: i + 1,
+                    bulkTotal: totalMessages
+                });
+            }
+            
+            // Emit progress to all clients
+            io.emit('bulk_progress', {
+                bulkId: bulkId,
+                sent: successCount,
+                failed: failureCount,
+                total: totalMessages,
+                current: i + 1,
+                currentPhone: formattedPhone,
+                status: 'sending'
+            });
+            
+        } catch (error) {
+            console.error(`❌ [${i + 1}/${totalMessages}] Failed to send to ${formattedPhone}:`, error.message);
+            
+            results.push({
+                phone: formattedPhone,
+                status: 'failed',
+                error: error.message,
+                timestamp: new Date().toISOString(),
+                index: i + 1
+            });
+            
+            failureCount++;
+            
+            // Emit failure to specific socket if provided
+            if (socket) {
+                socket.emit('message_failed', {
+                    to: formattedPhone,
+                    message: message,
+                    error: error.message,
+                    timestamp: new Date().toISOString(),
+                    bulkIndex: i + 1,
+                    bulkTotal: totalMessages
+                });
+            }
+            
+            // Emit progress update
+            io.emit('bulk_progress', {
+                bulkId: bulkId,
+                sent: successCount,
+                failed: failureCount,
+                total: totalMessages,
+                current: i + 1,
+                currentPhone: formattedPhone,
+                status: 'error',
+                lastError: error.message
+            });
+        }
+        
+        // Smart delay between messages (except for the last one)
+        if (i < phoneNumbers.length - 1) {
+            const smartDelay = Math.max(delay, RATE_LIMIT.delayBetweenMessages);
+            console.log(`⏳ Waiting ${smartDelay}ms before next message...`);
+            await new Promise(resolve => setTimeout(resolve, smartDelay));
+        }
+    }
+    
+    // Calculate completion stats
+    const endTime = Date.now();
+    const duration = Math.round((endTime - startTime) / 1000);
+    const successRate = totalMessages > 0 ? Math.round((successCount / totalMessages) * 100) : 0;
+    
+    console.log(`📊 Bulk send complete in ${duration}s: ${successCount} sent, ${failureCount} failed (${successRate}% success rate)`);
+    
+    // Remove from active bulk sends
+    activeBulkSends.delete(bulkId);
+    
+    // Emit completion status
+    io.emit('bulk_completed', {
+        bulkId: bulkId,
+        total: totalMessages,
+        sent: successCount,
+        failed: failureCount,
+        duration: duration,
+        successRate: successRate,
+        results: results
+    });
+    
+    return {
+        total: totalMessages,
+        sent: successCount,
+        failed: failureCount,
+        duration: duration,
+        successRate: successRate,
+        results: results
+    };
 }
 
 // Socket.IO connection handling
@@ -281,6 +477,86 @@ io.on('connection', (socket) => {
         }
     });
     
+    // Enhanced bulk message handler
+    socket.on('send_bulk_messages', async (data) => {
+        try {
+            const { phoneNumbers, message, delay = 5000 } = data;
+            
+            console.log(`📋 Bulk message request from ${socket.id}: ${phoneNumbers.length} recipients`);
+            
+            // Validate bulk request
+            const validationErrors = validateBulkRequest(phoneNumbers, message);
+            if (validationErrors.length > 0) {
+                socket.emit('bulk_failed', {
+                    error: validationErrors.join(', '),
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+            
+            // Check if user already has active bulk send
+            const hasActiveBulk = Array.from(activeBulkSends.values()).some(
+                bulk => bulk.socketId === socket.id
+            );
+            
+            if (hasActiveBulk) {
+                socket.emit('bulk_failed', {
+                    error: 'You already have an active bulk send in progress',
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+            
+            // Check bulk rate limit
+            if (!checkRateLimit(`bulk_${socket.id}`, 'bulk')) {
+                socket.emit('bulk_failed', {
+                    error: 'Bulk send rate limit exceeded. Please wait before sending another batch.',
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+            
+            // Add to bulk rate limit
+            addToRateLimit(`bulk_${socket.id}`);
+            
+            // Emit start event
+            socket.emit('bulk_started', {
+                total: phoneNumbers.length,
+                delay: delay,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Start bulk sending
+            const results = await sendBulkMessages(phoneNumbers, message, delay, socket);
+            
+            // Emit completion
+            socket.emit('bulk_completed', {
+                results: results,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            console.error('❌ Error in bulk send:', error);
+            socket.emit('bulk_failed', {
+                error: error.message,
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
+    
+    // Handle bulk status requests
+    socket.on('get_bulk_status', () => {
+        const activeBulk = Array.from(activeBulkSends.values()).find(
+            bulk => bulk.socketId === socket.id
+        );
+        
+        socket.emit('bulk_status', {
+            hasActiveBulk: !!activeBulk,
+            activeBulkCount: activeBulkSends.size,
+            timestamp: new Date().toISOString()
+        });
+    });
+    
     // Handle client status requests
     socket.on('get_status', () => {
         socket.emit('status', {
@@ -314,7 +590,8 @@ app.get('/health', (req, res) => {
         server: {
             uptime: process.uptime(),
             memory: process.memoryUsage(),
-            connectedClients: connectedSockets.size
+            connectedClients: connectedSockets.size,
+            activeBulkSends: activeBulkSends.size
         }
     });
 });
@@ -325,6 +602,7 @@ app.get('/api/status', (req, res) => {
         ready: isReady,
         hasQR: !!qrString,
         connectedClients: connectedSockets.size,
+        activeBulkSends: activeBulkSends.size,
         timestamp: new Date().toISOString()
     });
 });
@@ -388,7 +666,7 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
-    console.log('🚀 Enhanced WhatsApp Messaging Platform started');
+    console.log('🚀 Enhanced WhatsApp Messaging Platform with Bulk Messaging started');
     console.log(`📡 Server running on http://${HOST}:${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log('🔄 Initializing WhatsApp client...');
