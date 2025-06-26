@@ -1,5 +1,294 @@
-            document.getElementById('bulk-phones').value = phoneList.join('\\n');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced WhatsApp Messaging Platform</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #075E54, #128C7E); color: white; padding: 30px; text-align: center; }
+        .banner { background: #ff4444; color: white; padding: 15px; text-align: center; font-weight: bold; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { background: #ff4444; } 50% { background: #ff6666; } 100% { background: #ff4444; } }
+        .tabs { display: flex; background: #f8f9fa; border-bottom: 2px solid #e0e0e0; }
+        .tab-button { flex: 1; padding: 15px 20px; background: none; border: none; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.3s ease; color: #666; }
+        .tab-button.active { background: #25D366; color: white; }
+        .tab-button:hover { background: #e8f5e8; color: #075E54; }
+        .tab-button.active:hover { background: #1da851; }
+        .tab-content { display: none; padding: 30px; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #333; }
+        input, textarea { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; transition: border-color 0.3s ease; }
+        input:focus, textarea:focus { outline: none; border-color: #25D366; }
+        .btn { background: linear-gradient(135deg, #25D366, #128C7E); color: white; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(37, 211, 102, 0.3); }
+        #qr-container { text-align: center; padding: 40px; background: #f8f9fa; border-radius: 10px; margin: 20px 0; }
+        #qr-code { max-width: 300px; height: auto; border: 4px solid #25D366; border-radius: 10px; }
+        .status { padding: 15px; margin: 20px 0; border-radius: 8px; font-weight: 600; }
+        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .progress-bar { background: #e0e0e0; border-radius: 10px; overflow: hidden; height: 25px; margin: 15px 0; }
+        .progress-fill { background: linear-gradient(90deg, #25D366, #128C7E); height: 100%; width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px; }
+        .stat-card { text-align: center; padding: 10px; background: white; border-radius: 5px; border: 1px solid #e0e0e0; }
+        .stat-number { font-size: 1.2em; font-weight: 600; margin-bottom: 5px; }
+        .stat-label { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="banner">🚨 RAILWAY DEPLOYMENT CONFIRMED - BULK MESSAGING FEATURES NOW LIVE! 🚨<br>Timestamp: June 25, 2025 - Enhanced Platform with Complete Bulk Messaging</div>
+        <div class="header">
+            <h1>📱 Enhanced WhatsApp Messaging Platform</h1>
+            <p>✨ Enhanced Features Available: Single Message • Bulk Message • Contact Management • Templates • Message Logs</p>
+        </div>
+        <div id="qr-container" style="display: none;">
+            <h3>📱 Scan QR Code with WhatsApp</h3>
+            <p>Open WhatsApp on your phone and scan this QR code</p>
+            <img id="qr-code" alt="QR Code" />
+            <p style="margin-top: 15px; color: #666;">🚨 Scan quickly! No auto-refresh during authentication.</p>
+        </div>
+        <div id="status-container" class="status" style="display: none;"></div>
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('single')">📨 Single Message</button>
+            <button class="tab-button" onclick="showTab('bulk')">📋 Bulk Message</button>
+            <button class="tab-button" onclick="showTab('logs')">📊 Message Logs</button>
+        </div>
+        <div id="single-tab" class="tab-content active">
+            <h2 style="color: #075E54; margin-bottom: 30px;">📨 Send Single Message</h2>
+            <form id="single-message-form">
+                <div class="form-group">
+                    <label for="phone">📱 Phone Number:</label>
+                    <input type="tel" id="phone" placeholder="1234567890 (US), 441234567890 (UK), 919876543210 (India)" required>
+                    <small style="color: #666; font-size: 12px;">Examples: 1234567890 (US), 441234567890 (UK), 919876543210 (India)</small>
+                </div>
+                <div class="form-group">
+                    <label for="message">💬 Message:</label>
+                    <textarea id="message" placeholder="Enter your message here..." required rows="6"></textarea>
+                    <small style="color: #666; font-size: 12px;">Tip: Use **bold** and _italic_ for WhatsApp formatting</small>
+                </div>
+                <button type="submit" class="btn">📤 Send WhatsApp Message</button>
+            </form>
+        </div>
+        <div id="bulk-tab" class="tab-content">
+            <h2 style="color: #075E54; margin-bottom: 30px;">📋 Send Bulk Messages</h2>
+            <form id="bulk-message-form">
+                <div class="form-group">
+                    <label for="bulk-phones">📱 Phone Numbers:</label>
+                    <textarea id="bulk-phones" placeholder="Enter phone numbers (one per line or comma-separated)&#10;1234567890&#10;9876543210&#10;441234567890" rows="6"></textarea>
+                    <small style="color: #666; font-size: 12px;">One number per line or comma-separated. Maximum 50 numbers per batch.</small>
+                </div>
+                <div class="form-group">
+                    <label for="bulk-message">💬 Message:</label>
+                    <textarea id="bulk-message" placeholder="Enter your message here..." required rows="6"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="delay">⏱️ Delay Between Messages (seconds):</label>
+                    <input type="number" id="delay" min="3" max="60" value="5" placeholder="5">
+                    <small style="color: #666; font-size: 12px;">Recommended: 5-10 seconds to avoid being blocked</small>
+                </div>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <button type="submit" class="btn">📤 Send Bulk Messages</button>
+                    <button type="button" class="btn" style="background: linear-gradient(135deg, #6c757d, #495057);" onclick="previewRecipients()">👁️ Preview Recipients</button>
+                    <button type="button" class="btn" style="background: linear-gradient(135deg, #dc3545, #c82333);" onclick="clearBulkForm()">🗑️ Clear Form</button>
+                </div>
+            </form>
+            <div id="recipients-preview" style="display: none; background: #f8f9fa; border: 2px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h4 style="color: #075E54; margin-bottom: 15px;">📋 Recipients Preview</h4>
+                <div id="preview-list"></div>
+                <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px;">
+                    <small style="color: #075E54;"><strong>📊 Summary:</strong> <span id="preview-count">0</span> valid recipients found</small>
+                </div>
+            </div>
+            <div id="bulk-progress" style="display: none; background: #f8f9fa; border: 2px solid #25D366; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h4 style="color: #075E54; margin-bottom: 15px;">📊 Sending Progress</h4>
+                <div class="progress-bar"><div id="progress-fill" class="progress-fill">0%</div></div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-number" style="color: #25D366;" id="sent-count">0</div><div class="stat-label">Sent</div></div>
+                    <div class="stat-card"><div class="stat-number" style="color: #dc3545;" id="failed-count">0</div><div class="stat-label">Failed</div></div>
+                    <div class="stat-card"><div class="stat-number" style="color: #6c757d;" id="remaining-count">0</div><div class="stat-label">Remaining</div></div>
+                </div>
+                <div id="current-sending" style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; text-align: center; color: #075E54;">
+                    <strong>📤 Current:</strong> <span id="current-number">Ready to start...</span>
+                </div>
+            </div>
+            <div style="background: linear-gradient(135deg, #e8f5e8, #d4edda); border: 2px solid #25D366; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="color: #075E54; margin-bottom: 15px;">💡 Bulk Messaging Best Practices</h3>
+                <ul style="list-style: none; padding-left: 0;">
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;"><span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>Use delays of 5-10 seconds between messages</li>
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;"><span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>Send to maximum 50 recipients per batch</li>
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;"><span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>Include country codes (US: 1234567890, UK: 441234567890)</li>
+                    <li style="margin-bottom: 8px; padding-left: 25px; position: relative;"><span style="position: absolute; left: 0; color: #25D366; font-weight: bold;">✓</span>Monitor progress and check logs for failures</li>
+                </ul>
+            </div>
+        </div>
+        <div id="logs-tab" class="tab-content">
+            <h2 style="color: #075E54; margin-bottom: 30px;">📊 Message Logs & Statistics</h2>
+            <div class="stats-grid" style="margin-bottom: 30px;">
+                <div class="stat-card"><div class="stat-number" style="color: #075E54;" id="total-sent">0</div><div class="stat-label">Total Messages</div></div>
+                <div class="stat-card"><div class="stat-number" style="color: #25D366;" id="total-success">0</div><div class="stat-label">Successful</div></div>
+                <div class="stat-card"><div class="stat-number" style="color: #dc3545;" id="total-failed">0</div><div class="stat-label">Failed</div></div>
+            </div>
+            <div id="logs-container">
+                <div style="text-align: center; color: #666; padding: 40px;">
+                    <div style="font-size: 48px; margin-bottom: 15px;">📭</div>
+                    <p>No messages sent yet</p>
+                    <p style="font-size: 14px; margin-top: 10px;">Start sending messages to see logs here</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const socket = io();
+        let isReady = false;
+        let messageLogs = [];
+        let bulkSending = false;
+        let bulkStats = { total: 0, sent: 0, failed: 0, current: 0 };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadMessageLogs();
+            updateStats();
+            refreshLogs();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('single-message-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const phone = document.getElementById('phone').value.trim();
+                const message = document.getElementById('message').value.trim();
+                if (!phone || !message) {
+                    showStatus('❌ Please fill in all fields', 'error');
+                    return;
+                }
+                sendSingleMessage(phone, message);
+            });
+
+            document.getElementById('bulk-message-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (bulkSending) {
+                    showStatus('⏳ Bulk sending already in progress. Please wait...', 'error');
+                    return;
+                }
+                
+                const phones = document.getElementById('bulk-phones').value.trim();
+                const message = document.getElementById('bulk-message').value.trim();
+                const delay = parseInt(document.getElementById('delay').value) || 5;
+                
+                if (!phones || !message) {
+                    showStatus('❌ Please fill in all required fields', 'error');
+                    return;
+                }
+                
+                const phoneList = parsePhoneNumbers(phones);
+                if (phoneList.length === 0) {
+                    showStatus('❌ No valid phone numbers found', 'error');
+                    return;
+                }
+                
+                if (phoneList.length > 50) {
+                    showStatus('❌ Maximum 50 recipients allowed per batch', 'error');
+                    return;
+                }
+                
+                if (!confirm(`Send message to ${phoneList.length} recipients with ${delay}s delay?`)) {
+                    return;
+                }
+                
+                startBulkSending(phoneList, message, delay);
+            });
+        }
+
+        socket.on('qr', (qr) => {
+            document.getElementById('qr-code').src = qr;
+            document.getElementById('qr-container').style.display = 'block';
+            showStatus('📱 QR Code generated - scan with WhatsApp app', 'success');
+        });
+
+        socket.on('ready', () => {
+            isReady = true;
+            document.getElementById('qr-container').style.display = 'none';
+            showStatus('✅ WhatsApp connected and ready!', 'success');
+        });
+
+        socket.on('message_sent', (data) => {
+            logMessage(data.to, data.message, 'sent', data.timestamp);
+            showStatus(`✅ Message sent to ${data.to.replace('@c.us', '')}`, 'success');
+        });
+
+        socket.on('message_failed', (data) => {
+            logMessage(data.to, data.message, 'failed', data.timestamp, data.error);
+            showStatus(`❌ Failed to send to ${data.to.replace('@c.us', '')}: ${data.error}`, 'error');
+        });
+
+        socket.on('bulk_progress', (data) => {
+            bulkStats.sent = data.sent;
+            bulkStats.failed = data.failed;
+            updateBulkProgress();
+            if (data.currentPhone) {
+                document.getElementById('current-number').textContent = 
+                    `Sending to ${data.currentPhone.replace('@c.us', '')} (${data.current}/${data.total})`;
+            }
+        });
+
+        socket.on('bulk_completed', (data) => {
+            completeBulkSending();
+        });
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function sendSingleMessage(phone, message) {
+            socket.emit('send_message', { to: phone, message: message });
+            showStatus('📤 Sending message...', 'success');
+        }
+
+        function parsePhoneNumbers(input) {
+            const phones = input.split(/[,\n\r]+/)
+                .map(phone => phone.trim())
+                .filter(phone => phone.length > 0)
+                .map(phone => phone.replace(/[^\d]/g, ''))
+                .filter(phone => phone.length >= 10 && phone.length <= 15);
+            return [...new Set(phones)];
+        }
+
+        function previewRecipients() {
+            const phones = document.getElementById('bulk-phones').value.trim();
+            if (!phones) {
+                showStatus('❌ Please enter phone numbers first', 'error');
+                return;
+            }
             
+            const phoneList = parsePhoneNumbers(phones);
+            if (phoneList.length === 0) {
+                showStatus('❌ No valid phone numbers found', 'error');
+                return;
+            }
+            
+            document.getElementById('preview-list').innerHTML = phoneList.map((phone, index) => `
+                <div style="background: white; padding: 8px 12px; margin: 4px 0; border-radius: 5px; border-left: 3px solid #25D366; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">📱 +${phone}</span>
+                    <button onclick="removeRecipient(${index})" style="background: #dc3545; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; cursor: pointer;" title="Remove">×</button>
+                </div>
+            `).join('');
+            
+            document.getElementById('preview-count').textContent = phoneList.length;
+            document.getElementById('recipients-preview').style.display = 'block';
+            showStatus(`✅ Found ${phoneList.length} valid recipients`, 'success');
+        }
+
+        function removeRecipient(index) {
+            const phones = document.getElementById('bulk-phones').value.trim();
+            const phoneList = parsePhoneNumbers(phones);
+            phoneList.splice(index, 1);
+            document.getElementById('bulk-phones').value = phoneList.join('\n');
             if (phoneList.length > 0) {
                 previewRecipients();
             } else {
@@ -8,138 +297,71 @@
             }
         }
 
-        // Clear bulk form function
         function clearBulkForm() {
-            if (bulkSending) {
-                if (!confirm('Bulk sending is in progress. Are you sure you want to clear the form?')) {
-                    return;
-                }
+            if (bulkSending && !confirm('Bulk sending is in progress. Are you sure you want to clear the form?')) {
+                return;
             }
-            
             document.getElementById('bulk-message-form').reset();
             document.getElementById('recipients-preview').style.display = 'none';
             document.getElementById('bulk-progress').style.display = 'none';
             document.getElementById('delay').value = 5;
-            
-            // Reset bulk sending state
             bulkSending = false;
             bulkStats = { total: 0, sent: 0, failed: 0, current: 0 };
-            
             showStatus('✅ Form cleared', 'success');
         }
 
-        // Start bulk sending with progress tracking
         function startBulkSending(phoneList, message, delay) {
             bulkSending = true;
-            bulkStats = {
-                total: phoneList.length,
-                sent: 0,
-                failed: 0,
-                current: 0
-            };
-            
-            // Show progress section
-            const progressDiv = document.getElementById('bulk-progress');
-            progressDiv.style.display = 'block';
-            
-            // Update initial stats
+            bulkStats = { total: phoneList.length, sent: 0, failed: 0, current: 0 };
+            document.getElementById('bulk-progress').style.display = 'block';
             updateBulkProgress();
-            
             showStatus(`📤 Starting bulk send to ${phoneList.length} recipients...`, 'success');
-            
-            // Send bulk message request to server
-            socket.emit('send_bulk_messages', {
-                phoneNumbers: phoneList,
-                message: message,
-                delay: delay * 1000 // Convert to milliseconds
-            });
+            socket.emit('send_bulk_messages', { phoneNumbers: phoneList, message: message, delay: delay * 1000 });
         }
 
-        // Update bulk progress display
         function updateBulkProgress() {
-            const progressFill = document.getElementById('progress-fill');
-            const sentCount = document.getElementById('sent-count');
-            const failedCount = document.getElementById('failed-count');
-            const remainingCount = document.getElementById('remaining-count');
-            
             const percentage = bulkStats.total > 0 ? Math.round(((bulkStats.sent + bulkStats.failed) / bulkStats.total) * 100) : 0;
             const remaining = bulkStats.total - bulkStats.sent - bulkStats.failed;
-            
-            progressFill.style.width = percentage + '%';
-            progressFill.textContent = percentage + '%';
-            
-            sentCount.textContent = bulkStats.sent;
-            failedCount.textContent = bulkStats.failed;
-            remainingCount.textContent = remaining;
+            document.getElementById('progress-fill').style.width = percentage + '%';
+            document.getElementById('progress-fill').textContent = percentage + '%';
+            document.getElementById('sent-count').textContent = bulkStats.sent;
+            document.getElementById('failed-count').textContent = bulkStats.failed;
+            document.getElementById('remaining-count').textContent = remaining;
         }
 
-        // Complete bulk sending
         function completeBulkSending() {
             bulkSending = false;
-            
-            document.getElementById('current-number').textContent = 
-                `✅ Completed! Sent: ${bulkStats.sent}, Failed: ${bulkStats.failed}`;
-            
+            document.getElementById('current-number').textContent = `✅ Completed! Sent: ${bulkStats.sent}, Failed: ${bulkStats.failed}`;
             const successRate = bulkStats.total > 0 ? Math.round((bulkStats.sent / bulkStats.total) * 100) : 0;
-            
-            showStatus(
-                `🎉 Bulk sending completed! ${bulkStats.sent}/${bulkStats.total} messages sent successfully (${successRate}% success rate)`,
-                bulkStats.failed === 0 ? 'success' : 'error'
-            );
-            
-            // Clear form after successful completion
-            setTimeout(() => {
-                if (bulkStats.failed === 0) {
-                    clearBulkForm();
-                }
-            }, 5000);
+            showStatus(`🎉 Bulk sending completed! ${bulkStats.sent}/${bulkStats.total} messages sent successfully (${successRate}% success rate)`, bulkStats.failed === 0 ? 'success' : 'error');
+            setTimeout(() => { if (bulkStats.failed === 0) clearBulkForm(); }, 5000);
         }
 
-        // Message logging
         function logMessage(phone, message, status, timestamp, error = null) {
-            const log = {
-                id: Date.now(),
-                phone: phone,
-                message: message,
-                status: status,
-                timestamp: timestamp || new Date().toISOString(),
-                error: error
-            };
-            
+            const log = { id: Date.now(), phone: phone, message: message, status: status, timestamp: timestamp || new Date().toISOString(), error: error };
             messageLogs.unshift(log);
-            
-            if (messageLogs.length > 100) {
-                messageLogs = messageLogs.slice(0, 100);
-            }
-            
+            if (messageLogs.length > 100) messageLogs = messageLogs.slice(0, 100);
             localStorage.setItem('messageLogs', JSON.stringify(messageLogs));
             updateStats();
             refreshLogs();
         }
 
-        // Load message logs
         function loadMessageLogs() {
             const saved = localStorage.getItem('messageLogs');
-            if (saved) {
-                messageLogs = JSON.parse(saved);
-            }
+            if (saved) messageLogs = JSON.parse(saved);
         }
 
-        // Update statistics
         function updateStats() {
             const totalSent = messageLogs.length;
             const totalSuccess = messageLogs.filter(log => log.status === 'sent').length;
             const totalFailed = messageLogs.filter(log => log.status === 'failed').length;
-            
             document.getElementById('total-sent').textContent = totalSent;
             document.getElementById('total-success').textContent = totalSuccess;
             document.getElementById('total-failed').textContent = totalFailed;
         }
 
-        // Refresh logs display
         function refreshLogs() {
             const logsContainer = document.getElementById('logs-container');
-            
             if (messageLogs.length === 0) {
                 logsContainer.innerHTML = `
                     <div style="text-align: center; color: #666; padding: 40px;">
@@ -154,7 +376,6 @@
             logsContainer.innerHTML = messageLogs.map(log => {
                 const timestamp = new Date(log.timestamp).toLocaleString();
                 const phoneDisplay = log.phone.replace('@c.us', '');
-                
                 return `
                     <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px; border-left: 4px solid #25D366;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -171,6 +392,14 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function showStatus(message, type) {
+            const statusContainer = document.getElementById('status-container');
+            statusContainer.textContent = message;
+            statusContainer.className = `status ${type}`;
+            statusContainer.style.display = 'block';
+            setTimeout(() => statusContainer.style.display = 'none', 5000);
         }
     </script>
 </body>
